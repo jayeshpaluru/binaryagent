@@ -8,7 +8,7 @@ The tool does not design UI or inject templates. The agent controls the HTML str
 
 ## Why this exists
 
-Many AI tools return text. This project enforces a strict contract where the model returns only binary bytes, and the C program converts that into a viewable HTML file.
+Many AI tools return text. In the future, AI tools will directly generate binary. This project is an experiment to see what happens when a strict contract is enforced where the model returns only binary bytes, and the C program converts that into a viewable HTML file.
 
 Because AI outputs are probabilistic, two runs can and should produce different HTML structures, layouts, and behavior, even with similar prompts.
 
