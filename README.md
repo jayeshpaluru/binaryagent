@@ -1,6 +1,30 @@
 # binagent (C)
 
-CLI-based agent in C that converts between strict binary bytes and viewable program files.
+`binagent` takes binary text from an AI agent and materializes two files:
+- the raw binary text exactly as the agent produced it
+- the decoded HTML generated from that binary
+
+The tool does not design UI or inject templates. The agent controls the HTML structure.
+
+## Why this exists
+
+Many AI tools return text. This project enforces a strict contract where the model returns only binary bytes, and the C program converts that into a viewable HTML file.
+
+Because AI outputs are probabilistic, two runs can and should produce different HTML structures, layouts, and behavior, even with similar prompts.
+
+## Binary format contract
+
+The agent output must be plain text where:
+- each token is exactly 8 bits
+- only `0` and `1` are allowed
+- tokens are separated by whitespace
+- no markdown, no prose, no code fences
+
+Example token sequence:
+
+```text
+00111100 01101000 01110100 01101101 01101100 00111110
+```
 
 ## Build
 
@@ -8,76 +32,62 @@ CLI-based agent in C that converts between strict binary bytes and viewable prog
 make
 ```
 
-## Agent contract (binary only)
+## Usage
 
-If an AI agent reads this README, it should output only strict binary bytes:
-- each token is exactly 8 bits (`0`/`1`)
-- tokens are separated by spaces
-- no prose, markdown, comments, or extra text
+```bash
+./binagent materialize [--binary-in FILE|-] [--binary-out FILE] [--html-out FILE]
+```
 
-The C program is responsible for decoding that binary into a viewable file.
+Defaults:
+- `--binary-out output.binary.txt`
+- `--html-out output.html`
+- if `--binary-in` is omitted, input is read from `stdin`
 
-Recommended agent prompt:
+## Typical workflow
+
+1. Ask your AI agent for strict binary output only.
+2. Save the response as a file (or pipe it directly).
+3. Run `materialize`.
+4. Open the generated HTML.
+
+### File input
+
+```bash
+./binagent materialize \
+  --binary-in agent_output.binary.txt \
+  --binary-out run.binary.txt \
+  --html-out run.html
+```
+
+### Stdin input
+
+```bash
+./binagent materialize \
+  --binary-out run.binary.txt \
+  --html-out run.html < agent_output.binary.txt
+```
+
+## Recommended agent prompt
 
 ```text
 Output ONLY strict binary bytes for a complete standalone HTML file with inline CSS and JS.
 Rules:
 - each token must be exactly 8 bits, using only 0 or 1
-- tokens must be separated by a single space
+- tokens must be separated by spaces
 - no markdown, no code fences, no explanations, no extra text
 Return only the binary stream.
 ```
 
-## Generate binary (optional helper)
+## Smoke test
 
 ```bash
-./binagent generate \
-  --prompt "interactive glassmorphism particle field" \
-  --style sunset \
-  --binary-out program.binary.txt
+./scripts/smoke.sh
 ```
 
-This creates:
-- `program.binary.txt` (strict 8-bit binary bytes)
+## Repository layout
 
-## Decode binary to a viewable program
-
-```bash
-./binagent decode --binary-in program.binary.txt --program-out restored.html
-```
-
-One-command agent output conversion:
-
-```bash
-./binagent decode --program-out ui.html < agent_output.binary.txt
-```
-
-## Encode any existing file to binary
-
-```bash
-./binagent encode --program-in restored.html --binary-out restored.binary.txt
-```
-
-## Validate binary before decode
-
-```bash
-./binagent validate --binary-in agent_output.binary.txt
-```
-
-Or from stdin:
-
-```bash
-./binagent validate < agent_output.binary.txt
-```
-
-## Styles
-
-- `sunset`
-- `mint`
-- `neon`
-
-## Notes
-
-- Binary format is plain text bytes: each token is exactly 8 bits (`0`/`1`) separated by spaces.
-- `decode` writes the original bytes back out (for this project, that is typically standalone HTML with inline CSS + JS).
-- `generate` accepts only these styles: `sunset`, `mint`, `neon`.
+- `src/main.c`: binary parser + materialization command
+- `Makefile`: build target
+- `scripts/smoke.sh`: quick end-to-end verification
+- `agent_output.binary.txt`: sample binary fixture
+- `agent_output.html`: sample decoded result
