@@ -27,7 +27,12 @@ If the agent emits HTML directly (instead of binary tokens), `binagent` rejects 
 After decoding, `binagent` enforces these rules before writing the HTML file:
 - output must look like HTML (`<html>` or `<!doctype html>`)
 - output must include CSS styling (`<style>` block or `style=` attributes)
-- output must include at least one aesthetic cue (for example: `gradient`, `animation`, `box-shadow`, `transition`, `transform`, `border-radius`)
+- output must be rich enough to resemble a creative UI (not a tiny/plain page)
+- output must show intentional layout structure (`grid`/`flex`/`main`/`section`)
+- output must include typography intent (`font-family` plus `letter-spacing` or `clamp()` or similar)
+- output must include at least two visual depth cues (for example: `gradient`, `box-shadow`, `backdrop-filter`, `clip-path`)
+- output must include motion cues (`animation`, `@keyframes`, `transition`, or `transform`)
+- output must include interaction cues (for example: controls, hover states, or JS event handlers)
 
 This keeps the flow strict: `binary -> program -> html` and prevents low-effort/plain outputs.
 
@@ -46,13 +51,14 @@ make
 ## Usage
 
 ```bash
-./binagent materialize [--binary-in FILE|-] [--binary-out FILE] [--html-out FILE]
+./binagent materialize [--binary-in FILE|-] [--html-out FILE] [--binary-out FILE]
 ```
 
 Defaults:
-- `--binary-out output.binary.txt`
 - `--html-out output.html`
 - if `--binary-in` is omitted, input is read from `stdin`
+- if input is `stdin` and `--binary-out` is omitted, binary is saved to `output.binary.txt`
+- if input is a file and `--binary-out` is omitted, no extra binary copy is written
 
 ## Typical workflow
 
@@ -69,7 +75,6 @@ Do not feed generated HTML back to the agent as input for this tool.
 ```bash
 ./binagent materialize \
   --binary-in agent_output.binary.txt \
-  --binary-out run.binary.txt \
   --html-out run.html
 ```
 
@@ -77,19 +82,34 @@ Do not feed generated HTML back to the agent as input for this tool.
 
 ```bash
 ./binagent materialize \
-  --binary-out run.binary.txt \
   --html-out run.html < agent_output.binary.txt
+```
+
+### Save an explicit binary copy (optional)
+
+```bash
+./binagent materialize \
+  --binary-in agent_output.binary.txt \
+  --binary-out run.binary.txt \
+  --html-out run.html
 ```
 
 ## Recommended agent prompt
 
 ```text
 Output ONLY strict binary bytes for a complete standalone HTML file with inline CSS and JS.
+Design intent: produce a bold, creative, high-contrast UI concept that feels art-directed, not boilerplate.
 Rules:
 - each token must be exactly 8 bits, using only 0 or 1
 - tokens must be separated by spaces
 - no markdown, no code fences, no explanations, no extra text
-- decoded HTML must include CSS styling and at least one aesthetic visual treatment (e.g. gradient, animation, or box-shadow)
+- decoded HTML must include:
+  - intentional layout composition (grid or flex)
+  - expressive typography (custom font-family + sizing/letter-spacing treatment)
+  - at least two visual depth treatments (e.g. gradient + box-shadow/backdrop-filter/clip-path)
+  - motion (animation/keyframes/transition/transform)
+  - interactivity (button/input/hover or JS event handlers)
+Two different runs should produce visibly different UI structure and styling direction.
 Return only the binary stream.
 ```
 

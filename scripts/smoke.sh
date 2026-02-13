@@ -17,12 +17,51 @@ cat > "$TMP_DIR/seed.html" <<'HTML'
 <head>
   <meta charset="utf-8">
   <style>
-    body { margin: 0; font-family: system-ui; background: linear-gradient(135deg, #111827, #1f2937); color: #fff; }
-    .card { margin: 48px auto; max-width: 640px; padding: 24px; border-radius: 16px; box-shadow: 0 20px 50px rgba(0,0,0,.35); }
+    :root { --a:#09f; --b:#ff5ea7; --bg:#0b1020; }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      min-height: 100vh;
+      display: grid;
+      place-items: center;
+      font-family: "Trebuchet MS", "Avenir Next", sans-serif;
+      letter-spacing: .02em;
+      background: radial-gradient(circle at 20% 20%, #1a2a4a, transparent 35%), linear-gradient(135deg, var(--bg), #1d2340);
+      color: #f4f8ff;
+    }
+    .card {
+      width: min(760px, 92vw);
+      padding: 28px;
+      border-radius: 22px;
+      backdrop-filter: blur(8px);
+      background: rgba(255,255,255,.08);
+      box-shadow: 0 24px 70px rgba(0,0,0,.45);
+      animation: floatIn .7s ease-out both;
+      transition: transform .25s ease;
+    }
+    .card:hover { transform: translateY(-4px) scale(1.01); }
+    h1 { margin: 0 0 8px; font-size: clamp(1.6rem, 3vw, 2.4rem); text-transform: uppercase; }
+    .row { display: flex; gap: 12px; align-items: center; margin-top: 14px; }
+    button { border: 0; border-radius: 999px; padding: 10px 14px; background: linear-gradient(90deg, var(--a), var(--b)); color: white; cursor: pointer; }
+    @keyframes floatIn { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: translateY(0); } }
   </style>
 </head>
 <body>
-  <main class="card"><h1>Smoke Test</h1><p>Styled and aesthetic fixture.</p></main>
+  <main class="card">
+    <h1>Smoke Test</h1>
+    <p id="label">Styled + motion + interaction fixture.</p>
+    <section class="row">
+      <button id="btn">Shuffle Accent</button>
+    </section>
+  </main>
+  <script>
+    const btn = document.getElementById('btn');
+    const label = document.getElementById('label');
+    btn.addEventListener('click', () => {
+      document.documentElement.style.setProperty('--a', '#' + Math.floor(Math.random()*16777215).toString(16).padStart(6, '0'));
+      label.textContent = 'Updated at ' + new Date().toLocaleTimeString();
+    });
+  </script>
 </body>
 </html>
 HTML

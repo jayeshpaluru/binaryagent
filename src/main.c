@@ -12,16 +12,19 @@
 static void print_usage(const char *name) {
     printf(
         "Usage:\n"
-        "  %s materialize [--binary-in FILE|-] [--binary-out FILE] [--html-out FILE]\n\n"
+        "  %s materialize [--binary-in FILE|-] [--html-out FILE] [--binary-out FILE]\n\n"
         "What it does:\n"
         "  1) Reads strict 8-bit binary text from --binary-in (or stdin)\n"
-        "  2) Writes that binary text to --binary-out\n"
-        "  3) Decodes to bytes and validates HTML quality\n"
-        "  4) Writes validated HTML to --html-out\n\n"
+        "  2) Decodes to bytes and validates HTML quality\n"
+        "  3) Writes validated HTML to --html-out\n"
+        "  4) Optionally writes binary copy to --binary-out\n\n"
+        "Binary output behavior:\n"
+        "  - if input is FILE and --binary-out is omitted, no binary copy is written\n"
+        "  - if input is stdin and --binary-out is omitted, binary is saved to output.binary.txt\n\n"
         "Validation rules:\n"
         "  - must decode to HTML (<html> or <!doctype html>)\n"
         "  - must include CSS styling (<style> or style=)\n"
-        "  - must include at least one aesthetic cue (e.g. gradient/animation/box-shadow)\n\n"
+        "  - must pass creative UI checks (layout + typography + visual depth + motion/interaction)\n\n"
         "Examples:\n"
         "  %s materialize --binary-in agent_output.binary.txt --binary-out run.binary.txt --html-out run.html\n"
         "  %s materialize --binary-out run.binary.txt --html-out run.html < agent_output.binary.txt\n",
@@ -259,29 +262,60 @@ static bool validate_html_quality(const unsigned char *decoded, size_t decoded_l
 
     bool looks_html = contains_nocase(text, "<!doctype html") || contains_nocase(text, "<html");
     bool has_css = contains_nocase(text, "<style") || contains_nocase(text, "style=");
-    const char *aesthetic_markers[] = {
+    bool has_layout = contains_nocase(text, "display:grid") ||
+                      contains_nocase(text, "display: grid") ||
+                      contains_nocase(text, "display:flex") ||
+                      contains_nocase(text, "display: flex") ||
+                      contains_nocase(text, "<main") ||
+                      contains_nocase(text, "<section");
+    bool has_typography = contains_nocase(text, "font-family") &&
+                          (contains_nocase(text, "letter-spacing") ||
+                           contains_nocase(text, "clamp(") ||
+                           contains_nocase(text, "text-transform") ||
+                           contains_nocase(text, "@font-face"));
+
+    const char *visual_markers[] = {
         "gradient",
         "box-shadow",
-        "animation",
-        "@keyframes",
-        "transition",
-        "transform",
         "backdrop-filter",
         "border-radius",
         "filter:",
-        "font-family"
+        "mix-blend-mode",
+        "clip-path",
+        "mask-image"
     };
+    const char *motion_markers[] = {"animation", "@keyframes", "transition", "transform"};
+    const char *interaction_markers[] = {"addEventListener", "onclick", "mousemove", "pointermove", "<button", ":hover", "<input"};
 
-    bool has_aesthetic_cue = false;
-    for (size_t i = 0; i < sizeof(aesthetic_markers) / sizeof(aesthetic_markers[0]); i++) {
-        if (contains_nocase(text, aesthetic_markers[i])) {
-            has_aesthetic_cue = true;
+    int visual_count = 0;
+    for (size_t i = 0; i < sizeof(visual_markers) / sizeof(visual_markers[0]); i++) {
+        if (contains_nocase(text, visual_markers[i])) {
+            visual_count++;
+        }
+    }
+
+    bool has_motion = false;
+    for (size_t i = 0; i < sizeof(motion_markers) / sizeof(motion_markers[0]); i++) {
+        if (contains_nocase(text, motion_markers[i])) {
+            has_motion = true;
+            break;
+        }
+    }
+
+    bool has_interaction = false;
+    for (size_t i = 0; i < sizeof(interaction_markers) / sizeof(interaction_markers[0]); i++) {
+        if (contains_nocase(text, interaction_markers[i])) {
+            has_interaction = true;
             break;
         }
     }
 
     free(text);
 
+    if (decoded_len < 1400) {
+        snprintf(reason, reason_cap, "decoded HTML is too small to be a creative UI (need richer structure/styles)");
+        return false;
+    }
     if (!looks_html) {
         snprintf(reason, reason_cap, "decoded output is not HTML (missing <html/doctype)");
         return false;
@@ -290,8 +324,24 @@ static bool validate_html_quality(const unsigned char *decoded, size_t decoded_l
         snprintf(reason, reason_cap, "decoded HTML must include styling (<style> block or style= attributes)");
         return false;
     }
-    if (!has_aesthetic_cue) {
-        snprintf(reason, reason_cap, "decoded HTML must include at least one aesthetic cue (e.g. gradient, animation, box-shadow, transition, transform)");
+    if (!has_layout) {
+        snprintf(reason, reason_cap, "decoded HTML must include intentional layout structure (grid/flex/section/main)");
+        return false;
+    }
+    if (!has_typography) {
+        snprintf(reason, reason_cap, "decoded HTML must include typography design (font-family plus letter-spacing/clamp/text-transform/@font-face)");
+        return false;
+    }
+    if (visual_count < 2) {
+        snprintf(reason, reason_cap, "decoded HTML must include at least two visual depth cues (e.g. gradient, box-shadow, backdrop-filter, clip-path)");
+        return false;
+    }
+    if (!has_motion) {
+        snprintf(reason, reason_cap, "decoded HTML must include motion cues (animation/@keyframes/transition/transform)");
+        return false;
+    }
+    if (!has_interaction) {
+        snprintf(reason, reason_cap, "decoded HTML must include interaction cues (event handlers, controls, or hover states)");
         return false;
     }
 
@@ -301,7 +351,8 @@ static bool validate_html_quality(const unsigned char *decoded, size_t decoded_l
 
 static int cmd_materialize(int argc, char **argv) {
     const char *binary_in = NULL;
-    const char *binary_out = DEFAULT_BINARY_OUT;
+    const char *binary_out = NULL;
+    bool binary_out_explicit = false;
     const char *html_out = DEFAULT_HTML_OUT;
 
     for (int i = 2; i < argc; i++) {
@@ -313,6 +364,7 @@ static int cmd_materialize(int argc, char **argv) {
             const char *v = arg_value(argc, argv, &i, "--binary-out");
             if (!v) return 1;
             binary_out = v;
+            binary_out_explicit = true;
         } else if (strcmp(argv[i], "--html-out") == 0) {
             const char *v = arg_value(argc, argv, &i, "--html-out");
             if (!v) return 1;
@@ -328,6 +380,10 @@ static int cmd_materialize(int argc, char **argv) {
     const char *source_name = NULL;
     if (!read_binary_source(binary_in, &binary_text, &binary_len, &source_name)) {
         return 1;
+    }
+
+    if (!binary_out_explicit && (!binary_in || strcmp(binary_in, "-") == 0)) {
+        binary_out = DEFAULT_BINARY_OUT;
     }
 
     unsigned char *decoded = NULL;
@@ -354,8 +410,10 @@ static int cmd_materialize(int argc, char **argv) {
         return 1;
     }
 
-    ok = write_file_bytes(binary_out, binary_text, binary_len) &&
-         write_file_bytes(html_out, decoded, decoded_len);
+    ok = write_file_bytes(html_out, decoded, decoded_len);
+    if (ok && binary_out) {
+        ok = write_file_bytes(binary_out, binary_text, binary_len);
+    }
 
     free(decoded);
     free(binary_text);
@@ -366,7 +424,11 @@ static int cmd_materialize(int argc, char **argv) {
 
     printf("Materialized agent output\n");
     printf("Source: %s\n", source_name);
-    printf("Binary: %s (%zu bytes)\n", binary_out, binary_len);
+    if (binary_out) {
+        printf("Binary: %s (%zu bytes)\n", binary_out, binary_len);
+    } else {
+        printf("Binary: (not written; pass --binary-out FILE to save a copy)\n");
+    }
     printf("HTML:   %s (%zu bytes)\n", html_out, decoded_len);
     return 0;
 }
