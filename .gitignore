@@ -1,0 +1,17 @@
+binagent
+*.o
+
+# Generated binary/html outputs
+*.binary.txt
+*.html
+
+# Keep sample fixtures in repo
+!agent_output.binary.txt
+!agent_output.html
+!converted_from_binary.html
+
+# macOS
+.DS_Store
+
+# Tooling scratch
+.grok/
