@@ -16,7 +16,12 @@ static void print_usage(const char *name) {
         "What it does:\n"
         "  1) Reads strict 8-bit binary text from --binary-in (or stdin)\n"
         "  2) Writes that binary text to --binary-out\n"
-        "  3) Decodes to bytes and writes the result to --html-out\n\n"
+        "  3) Decodes to bytes and validates HTML quality\n"
+        "  4) Writes validated HTML to --html-out\n\n"
+        "Validation rules:\n"
+        "  - must decode to HTML (<html> or <!doctype html>)\n"
+        "  - must include CSS styling (<style> or style=)\n"
+        "  - must include at least one aesthetic cue (e.g. gradient/animation/box-shadow)\n\n"
         "Examples:\n"
         "  %s materialize --binary-in agent_output.binary.txt --binary-out run.binary.txt --html-out run.html\n"
         "  %s materialize --binary-out run.binary.txt --html-out run.html < agent_output.binary.txt\n",
@@ -224,6 +229,76 @@ static bool read_binary_source(const char *binary_in, unsigned char **binary_tex
     return true;
 }
 
+static bool contains_nocase(const char *haystack, const char *needle) {
+    if (!haystack || !needle || !*needle) {
+        return false;
+    }
+
+    size_t needle_len = strlen(needle);
+    for (const char *h = haystack; *h; h++) {
+        size_t i = 0;
+        while (i < needle_len && h[i] && tolower((unsigned char)h[i]) == tolower((unsigned char)needle[i])) {
+            i++;
+        }
+        if (i == needle_len) {
+            return true;
+        }
+    }
+    return false;
+}
+
+static bool validate_html_quality(const unsigned char *decoded, size_t decoded_len, char *reason, size_t reason_cap) {
+    char *text = (char *)malloc(decoded_len + 1);
+    if (!text) {
+        snprintf(reason, reason_cap, "out of memory");
+        return false;
+    }
+
+    memcpy(text, decoded, decoded_len);
+    text[decoded_len] = '\0';
+
+    bool looks_html = contains_nocase(text, "<!doctype html") || contains_nocase(text, "<html");
+    bool has_css = contains_nocase(text, "<style") || contains_nocase(text, "style=");
+    const char *aesthetic_markers[] = {
+        "gradient",
+        "box-shadow",
+        "animation",
+        "@keyframes",
+        "transition",
+        "transform",
+        "backdrop-filter",
+        "border-radius",
+        "filter:",
+        "font-family"
+    };
+
+    bool has_aesthetic_cue = false;
+    for (size_t i = 0; i < sizeof(aesthetic_markers) / sizeof(aesthetic_markers[0]); i++) {
+        if (contains_nocase(text, aesthetic_markers[i])) {
+            has_aesthetic_cue = true;
+            break;
+        }
+    }
+
+    free(text);
+
+    if (!looks_html) {
+        snprintf(reason, reason_cap, "decoded output is not HTML (missing <html/doctype)");
+        return false;
+    }
+    if (!has_css) {
+        snprintf(reason, reason_cap, "decoded HTML must include styling (<style> block or style= attributes)");
+        return false;
+    }
+    if (!has_aesthetic_cue) {
+        snprintf(reason, reason_cap, "decoded HTML must include at least one aesthetic cue (e.g. gradient, animation, box-shadow, transition, transform)");
+        return false;
+    }
+
+    reason[0] = '\0';
+    return true;
+}
+
 static int cmd_materialize(int argc, char **argv) {
     const char *binary_in = NULL;
     const char *binary_out = DEFAULT_BINARY_OUT;
@@ -266,6 +341,14 @@ static int cmd_materialize(int argc, char **argv) {
 
     if (decoded_len == 0) {
         fprintf(stderr, "error: binary input was empty\n");
+        free(decoded);
+        free(binary_text);
+        return 1;
+    }
+
+    char validation_reason[256];
+    if (!validate_html_quality(decoded, decoded_len, validation_reason, sizeof(validation_reason))) {
+        fprintf(stderr, "error: rejected decoded program: %s\n", validation_reason);
         free(decoded);
         free(binary_text);
         return 1;

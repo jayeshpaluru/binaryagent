@@ -20,6 +20,17 @@ The agent output must be plain text where:
 - tokens are separated by whitespace
 - no markdown, no prose, no code fences
 
+If the agent emits HTML directly (instead of binary tokens), `binagent` rejects it.
+
+## Program quality contract (enforced)
+
+After decoding, `binagent` enforces these rules before writing the HTML file:
+- output must look like HTML (`<html>` or `<!doctype html>`)
+- output must include CSS styling (`<style>` block or `style=` attributes)
+- output must include at least one aesthetic cue (for example: `gradient`, `animation`, `box-shadow`, `transition`, `transform`, `border-radius`)
+
+This keeps the flow strict: `binary -> program -> html` and prevents low-effort/plain outputs.
+
 Example token sequence:
 
 ```text
@@ -50,6 +61,9 @@ Defaults:
 3. Run `materialize`.
 4. Open the generated HTML.
 
+This is intentionally one-way for agent output: `binary -> program -> html`.
+Do not feed generated HTML back to the agent as input for this tool.
+
 ### File input
 
 ```bash
@@ -75,6 +89,7 @@ Rules:
 - each token must be exactly 8 bits, using only 0 or 1
 - tokens must be separated by spaces
 - no markdown, no code fences, no explanations, no extra text
+- decoded HTML must include CSS styling and at least one aesthetic visual treatment (e.g. gradient, animation, or box-shadow)
 Return only the binary stream.
 ```
 
@@ -89,5 +104,3 @@ Return only the binary stream.
 - `src/main.c`: binary parser + materialization command
 - `Makefile`: build target
 - `scripts/smoke.sh`: quick end-to-end verification
-- `agent_output.binary.txt`: sample binary fixture
-- `agent_output.html`: sample decoded result
